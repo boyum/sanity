@@ -71,10 +71,17 @@ if (path.win32 === path) {
   libFragment = '$1/lib/'
 }
 
-const logCompile = from => (file, enc, cb) => {
-  gutil.log(`[${from}] Compiling`, `'${chalk.cyan(file._path || file.path)}'...`)
-  cb(null, file)
-}
+const pkgPath = (cwd, sourcePath) => path.relative(path.join(cwd, 'packages'), sourcePath)
+
+const log = prefix =>
+  through.obj((file, enc, cb) => {
+    if (process.env.VERBOSE) {
+      gutil.log(prefix, `'${chalk.green(pkgPath(file.cwd, file._path || file.path))}'...`)
+    }
+    cb(null, file)
+  })
+
+const logCompile = from => log(`[${from}] Compiling `)
 
 const mapToDest = orgPath => {
   const outPath = orgPath.replace(srcEx, libFragment).replace(srcRootEx, libFragment)
@@ -82,7 +89,6 @@ const mapToDest = orgPath => {
 }
 
 const packagesPath = 'packages'
-const pkgPath = (cwd, sourcePath) => path.relative(path.join(cwd, 'packages'), sourcePath)
 const getLogErrorHandler = () => plumber({errorHandler: err => gutil.log(err.stack)})
 const watchJavaScript = series(buildJavaScript, function watchJS() {
   watch(scripts, watchJavaScriptRebuild)
@@ -122,7 +128,7 @@ function buildJavaScript() {
         hasChanged: compareModified
       })
     )
-    .pipe(through.obj(logCompile('JS')))
+    .pipe(logCompile(chalk.yellow('JS')))
     .pipe(babel())
     .pipe(assetFilter.restore)
     .pipe(
@@ -146,7 +152,7 @@ function watchJavaScriptRebuild() {
       })
     )
     .pipe(newer(packagesPath))
-    .pipe(through.obj(logCompile('JS')))
+    .pipe(logCompile(chalk.yellow('JS')))
     .pipe(babel())
     .pipe(dest(packagesPath))
 }
@@ -154,7 +160,7 @@ function watchJavaScriptRebuild() {
 function rebuildTypeScriptProject(project) {
   return project
     .src()
-    .pipe(through.obj(logCompile('TS')))
+    .pipe(logCompile(chalk.blue('TS')))
     .pipe(getLogErrorHandler())
     .pipe(project())
     .js.pipe(getLogErrorHandler())
@@ -166,7 +172,7 @@ function buildTypeScript() {
     ...tsProjects.map(project => {
       const compilation = project
         .src()
-        .pipe(through.obj(logCompile('D.TS')))
+        .pipe(logCompile(chalk.blueBright('D.TS')))
         .pipe(project())
       return compilation.dts
         .pipe(sourcemaps.write('.', {includeContent: false, sourceRoot: './'}))
@@ -187,12 +193,7 @@ function buildAssets() {
       })
     )
     .pipe(newer(packagesPath))
-    .pipe(
-      through.obj((file, enc, callback) => {
-        gutil.log('Copying  ', `'${chalk.green(pkgPath(file.cwd, file._path))}'...`)
-        callback(null, file)
-      })
-    )
+    .pipe(log('Copying'))
     .pipe(dest(packagesPath))
 }
 
